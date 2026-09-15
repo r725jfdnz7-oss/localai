@@ -134,7 +134,7 @@ async function refresh(){
 
 $("saveBiz").onclick=async()=>{
   const {data:{user}}=await client.auth.getUser(); if(!user)return;
-  const payload={owner_id:user.id,name:$("bizName").value.trim(),type:$("bizType").value.trim(),address:$("bizAddress").value.trim()};
+  const payload={owner_id:user.id,name:$("bizName").value.trim(),category:$("bizType").value.trim(),address:$("bizAddress").value.trim()};
   if(!payload.name){msg("bizMsg","Inserisci il nome dell'attività.");return}
   const res=business?await client.from("businesses").update(payload).eq("id",business.id).select().single():await client.from("businesses").insert(payload).select().single();
   if(res.error){msg("bizMsg",res.error.message);return} business=res.data;msg("bizMsg","Attività salvata.",true);$("welcome").textContent="Ciao, "+business.name;
