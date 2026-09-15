@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#111111">
+  <title>LocalAI</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f6f8;color:#111}
+    .wrap{max-width:760px;margin:auto;padding:20px}.brand{font-size:30px;font-weight:800;margin:20px 0 6px}.sub{color:#6b7280;margin-bottom:24px}
+    .card{background:#fff;border-radius:22px;padding:22px;margin:14px 0;box-shadow:0 8px 30px #0000000b}
+    input,button{width:100%;padding:14px 16px;border-radius:13px;border:1px solid #ddd;font-size:16px;margin-top:10px}
+    button{background:#111;color:#fff;border:0;font-weight:700;cursor:pointer}.secondary{background:#eee;color:#111}
+    .tabs{display:flex;gap:8px;margin:16px 0;overflow:auto}.tabs button{width:auto;margin:0;white-space:nowrap}
+    .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.stat{padding:18px;background:#f3f4f6;border-radius:16px}.num{font-size:28px;font-weight:800}
+    .row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid #eee}.muted{color:#6b7280;font-size:14px}
+    .hide{display:none}.error{color:#b91c1c;background:#fee2e2;padding:12px;border-radius:12px;margin-top:10px}.ok{color:#166534;background:#dcfce7;padding:12px;border-radius:12px;margin-top:10px}
+    .top{display:flex;justify-content:space-between;align-items:center}.logout{width:auto;background:#eee;color:#111;margin:0;padding:10px 14px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><div class="brand">LocalAI</div><button id="logout" class="logout hide">Esci</button></div>
+  <div class="sub">Il copilota AI per le attività locali.</div>
+
+  <section id="auth" class="card">
+    <h2 id="authTitle">Accedi</h2>
+    <input id="email" type="email" placeholder="Email">
+    <input id="password" type="password" placeholder="Password (min. 8 caratteri)">
+    <button id="authBtn">Accedi</button>
+    <button id="switchBtn" class="secondary">Non hai un account? Registrati</button>
+    <div id="authMsg"></div>
+  </section>
+
+  <section id="app" class="hide">
+    <div class="card">
+      <h2 id="welcome">Dashboard</h2>
+      <div class="grid">
+        <div class="stat"><div class="muted">Appuntamenti</div><div class="num" id="appointmentsCount">0</div></div>
+        <div class="stat"><div class="muted">Clienti</div><div class="num" id="customersCount">0</div></div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button data-tab="business">Attività</button>
+      <button data-tab="appointments">Appuntamenti</button>
+      <button data-tab="customers">Clienti</button>
+      <button data-tab="ai">AI</button>
+    </div>
+
+    <div id="business" class="card panel">
+      <h2>La tua attività</h2>
+      <input id="bizName" placeholder="Nome attività">
+      <input id="bizType" placeholder="Tipo (es. Parrucchiere, Bar...)">
+      <input id="bizAddress" placeholder="Indirizzo">
+      <button id="saveBiz">Salva attività</button>
+      <div id="bizMsg"></div>
+    </div>
+
+    <div id="appointments" class="card panel hide">
+      <h2>Appuntamenti</h2>
+      <input id="apptCustomer" placeholder="Nome cliente">
+      <input id="apptDate" type="datetime-local">
+      <input id="apptService" placeholder="Servizio">
+      <button id="addAppt">Aggiungi appuntamento</button>
+      <div id="apptList"></div>
+    </div>
+
+    <div id="customers" class="card panel hide">
+      <h2>Clienti</h2>
+      <input id="custName" placeholder="Nome cliente">
+      <input id="custPhone" placeholder="Telefono">
+      <input id="custEmail" type="email" placeholder="Email">
+      <button id="addCust">Aggiungi cliente</button>
+      <div id="custList"></div>
+    </div>
+
+    <div id="ai" class="card panel hide">
+      <h2>Assistente AI</h2>
+      <p class="muted">Questa prima versione collega account e dati a Supabase. Il motore AI reale verrà collegato nel passaggio successivo.</p>
+      <input id="aiText" placeholder="Scrivi un messaggio di prova...">
+      <button id="aiBtn">Simula risposta AI</button>
+      <div id="aiReply"></div>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+const { createClient } = supabase;
+const client = createClient(LOCALAI_CONFIG.SUPABASE_URL, LOCALAI_CONFIG.SUPABASE_PUBLISHABLE_KEY);
+let signUpMode=false, business=null;
+
+const $=id=>document.getElementById(id);
+function msg(id,text,ok=false){$(id).innerHTML=text?`<div class="${ok?'ok':'error'}">${text}</div>`:''}
+
+$("switchBtn").onclick=()=>{signUpMode=!signUpMode;$("authTitle").textContent=signUpMode?"Crea account":"Accedi";$("authBtn").textContent=signUpMode?"Registrati":"Accedi";$("switchBtn").textContent=signUpMode?"Hai già un account? Accedi":"Non hai un account? Registrati";msg("authMsg","")};
+
+$("authBtn").onclick=async()=>{
+  const email=$("email").value.trim(), password=$("password").value;
+  if(!email||password.length<8){msg("authMsg","Inserisci email e password di almeno 8 caratteri.");return}
+  let res=signUpMode ? await client.auth.signUp({email,password}) : await client.auth.signInWithPassword({email,password});
+  if(res.error){msg("authMsg",res.error.message);return}
+  if(signUpMode && !res.data.session){msg("authMsg","Account creato. Controlla l'email per confermare l'indirizzo.",true);return}
+  await load();
+};
+
+$("logout").onclick=async()=>{await client.auth.signOut();showAuth()};
+
+function showAuth(){$("auth").classList.remove("hide");$("app").classList.add("hide");$("logout").classList.add("hide")}
+function showApp(){$("auth").classList.add("hide");$("app").classList.remove("hide");$("logout").classList.remove("hide")}
+
+async function load(){
+  const {data:{user}}=await client.auth.getUser();
+  if(!user){showAuth();return}
+  showApp();
+  const b=await client.from("businesses").select("*").eq("owner_id",user.id).maybeSingle();
+  if(b.error){msg("bizMsg",b.error.message);return}
+  business=b.data;
+  if(business){$("bizName").value=business.name||"";$("bizType").value=business.type||"";$("bizAddress").value=business.address||"";$("welcome").textContent="Ciao, "+business.name}
+  await refresh();
+}
+
+async function refresh(){
+  const {data:{user}}=await client.auth.getUser(); if(!user)return;
+  let q1=client.from("appointments").select("*",{count:"exact",head:true}).eq("owner_id",user.id);
+  let q2=client.from("customers").select("*",{count:"exact",head:true}).eq("owner_id",user.id);
+  const [a,c]=await Promise.all([q1,q2]);
+  $("appointmentsCount").textContent=a.count||0;$("customersCount").textContent=c.count||0;
+  await listAppointments(); await listCustomers();
+}
+
+$("saveBiz").onclick=async()=>{
+  const {data:{user}}=await client.auth.getUser(); if(!user)return;
+  const payload={owner_id:user.id,name:$("bizName").value.trim(),type:$("bizType").value.trim(),address:$("bizAddress").value.trim()};
+  if(!payload.name){msg("bizMsg","Inserisci il nome dell'attività.");return}
+  const res=business?await client.from("businesses").update(payload).eq("id",business.id).select().single():await client.from("businesses").insert(payload).select().single();
+  if(res.error){msg("bizMsg",res.error.message);return} business=res.data;msg("bizMsg","Attività salvata.",true);$("welcome").textContent="Ciao, "+business.name;
+};
+
+$("addCust").onclick=async()=>{
+ const {data:{user}}=await client.auth.getUser(); if(!user)return;
+ if(!business){msg("custList","Prima salva la tua attività.");return}
+ const r=await client.from("customers").insert({owner_id:user.id,business_id:business.id,name:$("custName").value.trim(),phone:$("custPhone").value.trim(),email:$("custEmail").value.trim()});
+ if(r.error){msg("custList",r.error.message);return} $("custName").value=$("custPhone").value=$("custEmail").value=""; await refresh();
+};
+async function listCustomers(){
+ const {data:{user}}=await client.auth.getUser(); if(!user)return;
+ const r=await client.from("customers").select("*").eq("owner_id",user.id).order("created_at",{ascending:false});
+ $("custList").innerHTML=(r.data||[]).map(x=>`<div class="row"><div><b>${esc(x.name||"Cliente")}</b><div class="muted">${esc(x.phone||x.email||"")}</div></div></div>`).join("")||'<p class="muted">Nessun cliente ancora.</p>';
+}
+$("addAppt").onclick=async()=>{
+ const {data:{user}}=await client.auth.getUser(); if(!user)return;
+ if(!business){msg("apptList","Prima salva la tua attività.");return}
+ const r=await client.from("appointments").insert({owner_id:user.id,business_id:business.id,customer_name:$("apptCustomer").value.trim(),start_time:new Date($("apptDate").value).toISOString(),service:$("apptService").value.trim(),status:"confirmed"});
+ if(r.error){msg("apptList",r.error.message);return} $("apptCustomer").value=$("apptDate").value=$("apptService").value=""; await refresh();
+};
+async function listAppointments(){
+ const {data:{user}}=await client.auth.getUser(); if(!user)return;
+ const r=await client.from("appointments").select("*").eq("owner_id",user.id).order("start_time",{ascending:true});
+ $("apptList").innerHTML=(r.data||[]).map(x=>`<div class="row"><div><b>${esc(x.customer_name||"Cliente")}</b><div class="muted">${esc(x.service||"")} · ${new Date(x.start_time).toLocaleString("it-IT")}</div></div></div>`).join("")||'<p class="muted">Nessun appuntamento ancora.</p>';
+}
+$("aiBtn").onclick=()=>{$("aiReply").innerHTML='<div class="ok">Demo AI: ho ricevuto il tuo messaggio. Nel prossimo step colleghiamo il vero motore AI.</div>'};
+document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{document.querySelectorAll(".panel").forEach(p=>p.classList.add("hide"));$(b.dataset.tab).classList.remove("hide")});
+function esc(v){return String(v).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+client.auth.onAuthStateChange(()=>load());
+load();
+</script>
+</body>
+</html>
